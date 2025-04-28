@@ -151,7 +151,7 @@
         camera.stop();
       }
 
-      // 🔴 Stop all tracks from the webcam stream manually
+      // Stop all tracks from the webcam stream manually
       if (video.srcObject) {
         video.srcObject.getTracks().forEach(track => track.stop());
         video.srcObject = null;
