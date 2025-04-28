@@ -1,0 +1,45 @@
+.top-bar {
+    background: #d63384;
+    color: white;
+    padding: 10px 20px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 16px;
+}
+.top-bar a {
+    color: white;
+    text-decoration: none;
+    margin-left: 15px;
+}
+.top-bar a:hover {
+    text-decoration: underline;
+}
+.profile-container {
+    max-width: 600px;
+    margin: 30px auto;
+    padding: 20px;
+    background: white;
+    border-radius: 10px;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+    text-align: center;
+}
+h1, h2 {
+    color: #d63384;
+}
+.badges {
+    display: flex;
+    justify-content: center;
+    gap: 15px;
+    flex-wrap: wrap;
+}
+.badge {
+    text-align: center;
+}
+.badge img {
+    width: 50px;
+    height: 50px;
+}
+.logout-btn {
+    font-weight: bold;
+}

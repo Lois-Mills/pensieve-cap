@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Gaze Tracker</title>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/face_mesh.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
+  <style>
+    html, body {
+      margin: 0;
+      padding: 0;
+      overflow: hidden;
+      height: 100%;
+      background: #000;
+    }
+    video, canvas {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      object-fit: cover;
+    }
+  </style>
+</head>
+<body>
+  <video id="video" autoplay playsinline muted></video>
+  <canvas id="canvas"></canvas>
+  <audio id="alertAudio" src="{{ url_for('static', filename='alert.wav') }}"></audio>
+
+  <script>
+    const video = document.getElementById('video');
+    const canvas = document.getElementById('canvas');
+    const ctx = canvas.getContext('2d');
+    const alertAudio = document.getElementById('alertAudio');
+
+    const ROI = { x1: 200, y1: 100, x2: 450, y2: 300 };
+    const attentionThreshold = 5000;
+    const driftThreshold = 25;
+
+    let attentionLostStart = null;
+    let lastAlert = false;
+    let alertCounter = 0;
+    let smoothX = 0, smoothY = 0;
+    let lastIrisX = 0, lastIrisY = 0;
+    const smoothing = 0.2;
+
+    const faceMesh = new FaceMesh({
+      locateFile: file => `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${file}`
+    });
+
+    faceMesh.setOptions({
+      maxNumFaces: 1,
+      refineLandmarks: true,
+      minDetectionConfidence: 0.5,
+      minTrackingConfidence: 0.5
+    });
+
+    faceMesh.onResults(results => {
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.drawImage(results.image, 0, 0, canvas.width, canvas.height);
+
+      if (results.multiFaceLandmarks.length > 0) {
+        const landmarks = results.multiFaceLandmarks[0];
+
+        const irisLeft = landmarks[468];
+        const irisRight = landmarks[473];
+        const irisX = ((irisLeft.x + irisRight.x) / 2) * canvas.width;
+        const irisY = ((irisLeft.y + irisRight.y) / 2) * canvas.height;
+
+        smoothX += smoothing * (irisX - smoothX);
+        smoothY += smoothing * (irisY - smoothY);
+
+        // Gaze dot
+        ctx.beginPath();
+        ctx.arc(smoothX, smoothY, 5, 0, 2 * Math.PI);
+        ctx.fillStyle = 'green';
+        ctx.fill();
+
+        // ROI box
+        ctx.beginPath();
+        ctx.rect(ROI.x1, ROI.y1, ROI.x2 - ROI.x1, ROI.y2 - ROI.y1);
+        ctx.strokeStyle = 'rgba(255, 255, 0, 0.6)';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+
+        const inROI = irisX >= ROI.x1 && irisX <= ROI.x2 && irisY >= ROI.y1 && irisY <= ROI.y2;
+        const now = Date.now();
+
+        if (!inROI || Math.abs(irisX - lastIrisX) > driftThreshold || Math.abs(irisY - lastIrisY) > driftThreshold) {
+          if (!attentionLostStart) attentionLostStart = now;
+          if (now - attentionLostStart >= attentionThreshold) {
+            if (!lastAlert) {
+              alertAudio.play();
+              lastAlert = true;
+              alertCounter++;
+            }
+
+            ctx.font = "bold 28px Arial";
+            ctx.fillStyle = "red";
+            ctx.fillText("  Focus on reading!", 20, 40);
+          }
+        } else {
+          attentionLostStart = null;
+          lastAlert = false;
+
+          ctx.font = "bold 28px Arial";
+          ctx.fillStyle = "green";
+          ctx.fillText("   Good job!", 20, 40);
+        }
+
+        lastIrisX = irisX;
+        lastIrisY = irisY;
+
+        const drawConnectors = window.drawConnectors;
+        const faceMeshConnections = [
+          { points: FaceMesh.FACEMESH_CONTOURS, color: '#00FF00' },
+          { points: FaceMesh.FACEMESH_IRISES, color: '#FFD700' }
+        ];
+
+        for (const faceLandmarks of results.multiFaceLandmarks) {
+          for (const { points, color } of faceMeshConnections) {
+            drawConnectors(ctx, faceLandmarks, points, { color, lineWidth: 0.7 });
+          }
+        }
+      } else {
+        ctx.font = "bold 28px Arial";
+        ctx.fillStyle = "gray";
+        ctx.fillText("⚠️ Face not detected", 20, 40);
+      }
+    });
+
+    let camera = null;
+
+    function initializeCamera() {
+      camera = new Camera(video, {
+        onFrame: async () => {
+          await faceMesh.send({ image: video });
+        },
+        width: 640,
+        height: 480
+      });
+    }
+
+
+    window.endSession = function () {
+      if (camera) {
+        camera.stop();
+      }
+
+      // 🔴 Stop all tracks from the webcam stream manually
+      if (video.srcObject) {
+        video.srcObject.getTracks().forEach(track => track.stop());
+        video.srcObject = null;
+      }
+
+      // Clear canvas
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      // Draw thank you message
+      ctx.font = "bold 28px Arial";
+      ctx.fillStyle = "blue";
+      ctx.fillText("📦 Session ended. Thank you!", 20, 50);
+
+      // Hide video and canvas
+      video.style.display = "none";
+      canvas.style.display = "none";
+
+      // Send to backend
+      fetch('/end_session', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          user_id: currentUserId,
+          alert_count: alertCounter
+        })
+      }).then(res => res.json())
+        .then(data => {
+          console.log("✅ Session logged:", data);
+        });
+    };
+    
+    window.startSession = function () {
+      video.style.display = "block";
+      canvas.style.display = "block";
+
+      if (!camera) {
+        initializeCamera();
+      }
+
+      if (camera) {
+        camera.start();
+      }
+
+      console.log("📸 Gaze tracking session started");
+    };
+
+
+    let currentUserId = 1;
+
+    window.addEventListener("message", function(event) {
+      if (event.origin !== "https://34.30.26.22") return;
+
+      if (event.data.user_id) {
+        currentUserId = event.data.user_id;
+        console.log("✅ User ID received:", currentUserId);
+      }
+      if (event.data.action === "startSession") {
+      window.startSession();
+      }
+      if (event.data.action === "endSession") {
+      window.endSession();
+      }
+    });
+
+    window.addEventListener("beforeunload", window.endSession);
+  </script>
+</body>
+</html>
