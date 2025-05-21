@@ -2,7 +2,7 @@
 // Database credentials
 define('SERVER', 'localhost');     
 define('USERNAME', 'millsdarlyn');        
-define('PASSWD', 'Madara');              
+define('PASSWD', '*****');              
 define('DATABASE', 'adhdplatform');     
 
 
