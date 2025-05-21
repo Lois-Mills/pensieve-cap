@@ -4,7 +4,7 @@ Project Authors: Lois Mills & Joana Aba Mensah
 
 
 Project Description
-Pensieve is a web based application that has been created to mainly help curb certain reading challenges that individuals with Attention Deficit/Hyperactivity Disorder face. The platform 
+Pensieve is a web-based application that has been created to mainly help curb certain reading challenges that individuals with Attention Deficit/Hyperactivity Disorder face. The platform 
 has gamification features such as streaks, leaderboards, xp points and badges. It also incorporates an embedded gaze tracker to monitor users attention whilts reading. This platform
 seeks to motivate readers and also keep them attentive.
 
